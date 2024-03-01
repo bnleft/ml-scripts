@@ -1,6 +1,10 @@
+# python
+__pycache__
+
 # ide
 .idea
 
+# placeholders
 datasets/**
 !datasets/README.md
 specs/**
