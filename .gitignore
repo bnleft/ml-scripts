@@ -1,0 +1,7 @@
+# ide
+.idea
+
+datasets/**
+!datasets/README.md
+specs/**
+!specs/README.md
