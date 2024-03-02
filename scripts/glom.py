@@ -8,25 +8,49 @@ Requirements
 import os
 import json
 import urllib.request
-from PIL import Image
+import labelbox
+
+
+def download_image(url, filepath):
+    urllib.request.urlretrieve(url, filepath)
+
+
+def parse_ndjson(filename):
+    with open(filename, 'r') as file:
+        return [json.loads(line) for line in file]
+
 
 class GlomDatasetGenerator:
     PROJECT_ID = 'clspra3rw017b07xuf95ofdc0'
+    TASK_ID = 'clt9eyvlh0acx07wt3pk65rxy'
 
-    def __init__(self, filename):
-        self.filename = filename
+    def __init__(self, api_key):
+        self.client = labelbox.Client(api_key)
 
-    def parse_ndjson(self):
-        with open(self.filename, 'r') as file:
-            return [json.loads(line) for line in file]
-
-    def download_image(self, url, filepath):
-        urllib.request.urlretrieve(url, filepath)
+    def generate_spec(self, data_file):
+        try:
+            export_task = labelbox.ExportTask.get_task(self.client, task_id=self.TASK_ID)
+            export_task.get_stream(converter=labelbox.FileConverter(file_path=data_file)).start()
+        except:
+            print("Error downloading data, possibly due to invalid API key.")
 
     def process_data(self, data):
         for row in data:
             dataset_folder = os.path.join("datasets", "glom")
-            tag_folder = os.path.join(dataset_folder, "mesangial_matrix_expansion")
+
+            tag_value = None
+
+            for field in row['metadata_fields']:
+                if field['schema_name'] == 'tag':
+                    tag_value = field['value']
+
+            print(tag_value)
+            if tag_value is None:
+                continue
+
+            tag_value = tag_value.replace(" ", "_")
+
+            tag_folder = os.path.join(dataset_folder, tag_value)
             os.makedirs(tag_folder, exist_ok=True)
 
             for label in row['projects'][self.PROJECT_ID]['labels']:
@@ -36,11 +60,14 @@ class GlomDatasetGenerator:
                     relevance_folder = os.path.join(tag_folder, relevant_value)
                     os.makedirs(relevance_folder, exist_ok=True)
 
-                    image_filename = row['data_row']['id']
+                    file_extension = row['media_attributes']['mime_type'].split("/")[-1]
+                    image_name = os.path.splitext(row['data_row']['external_id'])[0]
+                    image_filename = image_name + '-' + row['data_row']['id'] + '.' + file_extension
                     image_url = row['data_row']['row_data']
-                    image_path = os.path.join(relevance_folder, image_filename)
-                    self.download_image(image_url, image_path)
 
-    def generate_dataset(self):
-        data = self.parse_ndjson()
+                    image_path = os.path.join(relevance_folder, image_filename)
+                    download_image(image_url, image_path)
+
+    def generate_dataset(self, data_file):
+        data = parse_ndjson(data_file)
         self.process_data(data)

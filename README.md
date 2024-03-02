@@ -8,6 +8,11 @@ A bunch of scripts for machine learning
 
 ## Usage
 
+Create .env file and populate these variables
+```bash
+LABELBOX_API_KEY=
+```
+
 Run the main to start script selection
 ```bash
 py main.py

@@ -9,3 +9,6 @@ datasets/**
 !datasets/README.md
 specs/**
 !specs/README.md
+
+# secrets
+.env
