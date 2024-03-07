@@ -13,12 +13,43 @@ Edge Cases
 import os
 import json
 import urllib.request
+from urllib.error import URLError
+import socket
 import labelbox
 from uuid import uuid4
+from PIL import Image, ImageDraw
 
 
-def download_image(url, filepath):
-    urllib.request.urlretrieve(url, filepath)
+def download_image(url, filepath, timeout=30):
+    try:
+        response = urllib.request.urlopen(url, timeout=timeout)
+        with open(filepath, 'wb') as f:
+            f.write(response.read())
+        print(f"Download successful: {filepath}")
+    except URLError as e:
+        print(f"Failed to download {url}. URLError: {e.reason}")
+    except socket.timeout:
+        print(f"Request timed out: {url}. Try increasing the timeout value.")
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+
+
+def add_bounding_box_to_image(image_path, box, save_path):
+    with Image.open(image_path) as img:
+        print('downloading sub image:', image_path)
+
+        draw = ImageDraw.Draw(img)
+
+        top = box['top']
+        left = box['left']
+        height = box['height']
+        width = box['width']
+
+        bottom_right = (left + width, top + height)
+
+        draw.rectangle([left, top, *bottom_right], width=2)
+
+        img.save(save_path)
 
 
 def parse_ndjson(filename):
@@ -43,8 +74,8 @@ class GlomDatasetGenerator:
         try:
             export_task = labelbox.ExportTask.get_task(self.client, task_id=self.task_id)
             export_task.get_stream(converter=labelbox.FileConverter(file_path=data_file)).start()
-        except:
-            print("Error downloading data, possibly due to invalid API key.")
+        except Exception as e:
+            print(f"Error downloading data, possibly due to invalid API key. Error: {e}")
 
     def process_data(self, data):
         for row in data:
@@ -62,23 +93,37 @@ class GlomDatasetGenerator:
             tag_folder = os.path.join(self.dataset_folder, tag_value)
             os.makedirs(tag_folder, exist_ok=True)
 
+            image_url = row['data_row']['row_data']
+
             for label in row['projects'][self.project_id]['labels']:
-                classifications = label['annotations']['classifications']
-                for classification in classifications:
-                    relevant_value = classification['radio_answer']['value']
-                    relevance_folder = os.path.join(tag_folder, relevant_value)
-                    os.makedirs(relevance_folder, exist_ok=True)
+                file_extension = row['media_attributes']['mime_type'].split("/")[-1]
+                image_name = os.path.splitext(row['data_row']['external_id'])[0]
+                image_generated_id = self.generate_image_id(image_name)
 
-                    file_extension = row['media_attributes']['mime_type'].split("/")[-1]
+                # original image
+                classification = label['annotations']['classifications'][0]
+                relevant_value = classification['radio_answer']['value']
+                relevance_folder = os.path.join(tag_folder, relevant_value)
+                os.makedirs(relevance_folder, exist_ok=True)
 
-                    image_name = os.path.splitext(row['data_row']['external_id'])[0]
-                    image_id = row['data_row']['id']
-                    image_generated_id = self.generate_image_id(image_name)
-                    image_filename = f"{image_generated_id}-{image_id}.{file_extension}"
-                    image_url = row['data_row']['row_data']
+                image_filename = f"{image_generated_id}.{file_extension}"
+                image_path = os.path.join(relevance_folder, image_filename)
+                download_image(image_url, image_path)
 
-                    image_path = os.path.join(relevance_folder, image_filename)
-                    download_image(image_url, image_path)
+                print('downloading image:', image_path)
+
+                if not os.path.exists(image_path):
+                    continue
+                    
+                # sub images with each bounding box
+                for index, object in enumerate(label['annotations']['objects']):
+                    sub_image_filename = f"{image_generated_id}-{index + 1}.{file_extension}"
+                    sub_image_path = os.path.join(relevance_folder, sub_image_filename)
+                    download_image(image_url, sub_image_path)
+
+                    box = object['bounding_box']
+
+                    add_bounding_box_to_image(sub_image_path, box, sub_image_path)
 
     def generate_image_id(self, image_name: str) -> str:
         image_id = str(uuid4())

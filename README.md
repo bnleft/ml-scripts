@@ -13,6 +13,11 @@ Create .env file and populate these variables
 LABELBOX_API_KEY=
 ```
 
+Install dependencies
+```bash
+pip install -r requirements.txt
+```
+
 Run the main to start script selection
 ```bash
 py main.py
@@ -25,3 +30,8 @@ py main.py
 `datasets`: hold multiple large datasets
 
 `specs`: hold specification files for datasets
+
+
+## Debugging
+
+- Comment print statements to speed up the dataset generation process

@@ -1,0 +1,2 @@
+labelbox==3.65.0
+Pillow==10.2.0
